@@ -1,4 +1,4 @@
-%% 1. ==================  数据准备（原脚本不变）  ==================
+%% 1. ==================  数据准备 ==================
 load('D:\EXIOBASE\matlab_code\data_D_cba.mat')
 load('D:\EXIOBASE\matlab_code\data_D_pba.mat')
 load('D:\EXIOBASE\matlab_code\data_U_cba.mat')
@@ -37,15 +37,14 @@ for k = 1:numel(regions)
 end
 data_minus{:,1} = regions;
 
-%% 2. ==================  交互 1：行业多选  ==================
-% 先列出所有行业
+%% 2. ================== 行业多选，可以多选  ==================
+% 列出所有行业
 allIndustries = unique(data_minus{:,2});
 fprintf('\n==========  行业列表  ==========\n');
 for k = 1:numel(allIndustries)
     fprintf('%2d  %s\n', k, allIndustries{k});
 end
 fprintf('\n请输入你要选择的行业编号（用空格分隔），输入 continue 继续：\n');
-
 selectedInd = {};
 while true
     userInput = strtrim(input('行业编号 > ', 's'));
@@ -66,7 +65,7 @@ end
 idxInd = ismember(data_minus{:,2}, selectedInd);
 subT   = data_minus(idxInd,:);
 
-%% 3. ==================  交互 2：选择要画图的数值列（第3列起）  ==================
+%% 3. ==================  选择要画图的数值列 ==================
 cols = 3:width(subT);               % 第3列到最后一列
 colNames = subT.Properties.VariableNames(cols);
 
@@ -99,7 +98,7 @@ values = values{:,2};    % 只保留数值向量
 
 fprintf('\n==========  画图设置  ==========\n');
 
-% 1) 是否删除极值
+% 是否删除极值
 clipMode = 0;
 clipOpt  = lower(strtrim(input('删除极值？(none/max/min/both) > ', 's')));
 switch clipOpt
@@ -109,13 +108,13 @@ switch clipOpt
     otherwise,   clipMode = 0;
 end
 
-% 2) 设置 parula 的颜色级数
-N = input('颜色级数 N (默认 256) > ');
+% 设置 parula 
+N = input('颜色级数N  > ');
 if isempty(N) || ~isnumeric(N) || N<2
     N = 256;
 end
 myCmap = parula(N);  
-%% 5. ==================  读 shapefile（原脚本不变）  ==================
+%% 5. ==================  导入 shapefile  ==================
 %%
 shpFile = 'ne_110m_admin_0_countries.shp';
 if ~isfile(shpFile)
@@ -131,6 +130,7 @@ iso2 = strtrim(iso2);
 iso2 = erase(iso2, " ");
 iso2 = regexprep(iso2, "\s+$", "");
 iso2 = extractBefore(iso2, 3);
+%这个额代码极其关键，iso2中原代码字符长为3，最后有一个空格还很难删，只能先取前两个
 iso3=string({S.ISO_A3_EH});
 name=string({S.NAME});
 codes = {'AT','BE','BG','CY','CZ','DE','DK','EE','ES','FI','FR','GR', ...
@@ -138,14 +138,7 @@ codes = {'AT','BE','BG','CY','CZ','DE','DK','EE','ES','FI','FR','GR', ...
          'SE','SI','SK','GB','US','JP','CN','CA','KR','BR','IN','MX', ...
          'RU','AU','CH','TR','TW','NO','ID','ZA','WA','WL','WE','WF','WM'};
 codes=string(codes);
-disp(codes(1))
-disp(iso2(115))
-
-if codes(8)==iso2(121)
-    disp(codes(8))
-else
-    disp(iso2(1))
-end
+%双重循环进行匹配，但是可以进行优化
 % 先给每个区域一个 NaN，找不到就留空
 countryValue = NaN(height(S),1);
 idx_country=zeros(177,1);
@@ -159,8 +152,6 @@ for i=1:49
         end
     end
 end
-
-
 for i=1:177
     if idx_country(i)>0
         countryValue(i)=values((idx_country(i)));
@@ -168,24 +159,20 @@ for i=1:177
         countryValue(i)=0;
     end
 end
-%% 6. ==================  开始画图（根据交互参数调整）  ==================
+%% 6. ==================  开始画图  ==================
 figure
 worldmap('World')     % 画世界底图
 load coastlines
 plotm(coastlat, coastlon, 'k', 'LineWidth', 0.5)  % 海岸线
-
-
-
-
-% 2) 计算 >0 的数值范围
+% 将countryvalue中的空值去掉，并不画在世界地图上
 validIdx = countryValue ~= 0;
-% 1) 先对正负分别取 log
+% 先取 log-这里可以补充交互，看需不需要做对数化处理，还可以加归一化处理
 logVal = sign(countryValue) .* log10(max(abs(countryValue), eps));
 
-% 2) 把结果线性映射到 [0,1]
+% 把结果线性映射到 [0,1]
 %logVal = rescale(logVal, 0, 1);
 
-% 3) 替换原变量
+% 替换原变量
 countryValue = logVal;
 
 switch clipMode
@@ -199,16 +186,14 @@ if cmin==cmax
     cmin = cmin - 1;
     cmax = cmax + 1;
 end
-
-% 3) 先统一画成浅灰色底图（可改成白色）
+% 统一画成浅灰色底图
 for i = 1:numel(S)
     patchm(S(i).Lat, S(i).Lon, ...
-           'FaceColor', [0.9 0.9 0.9], ...   % 浅灰底图
+           'FaceColor', [0.9 0.9 0.9], ...   % 浅灰底图，可以换
            'EdgeColor', [0.5 0.5 0.5], ...
            'LineWidth', 0.3);
 end
-
-% 4) 再单独给 >0 的国家上色
+% 单独给不等于0的国家上色
 for i = 1:numel(S)
     if validIdx(i)
         % 计算颜色索引
@@ -220,10 +205,7 @@ for i = 1:numel(S)
                'LineWidth', 0.3);
     end
 end
-
-% 5) 颜色条
-
-
+%上颜色条
 colormap(myCmap)
 caxis([cmin cmax])
 ticks  = linspace(cmin,cmax,5);
